@@ -7,12 +7,12 @@ TODO: allow for parameter sweep across multiple num_neighbours settings
 Yifei Aug 2023
 """
 
-from typing import Tuple
+from typing import Tuple, Optional, Union
 
 import anndata
 
 from banksy_utils.plot_utils import plot_edge_histograms, plot_weights, plot_theta_graph
-from banksy.main import generate_spatial_weights_fixed_nbrs, median_dist_to_nearest_neighbour
+from banksy.graph import generate_spatial_weights, median_dist_to_nearest_neighbour
 
 
 def initialize_banksy(adata: anndata.AnnData,
@@ -20,6 +20,8 @@ def initialize_banksy(adata: anndata.AnnData,
                       num_neighbours: int = 15,
                       nbr_weight_decay: str = 'scaled_gaussian',
                       max_m: int = 1,
+                      max_radius: Optional[Union[float, str]] = 'auto',
+                      radius_multiplier: float = 3.0,
                       plt_edge_hist: bool = True,
                       plt_nbr_weights: bool = True,
                       plt_agf_angles: bool = False,
@@ -37,7 +39,13 @@ def initialize_banksy(adata: anndata.AnnData,
 
         max_m (int): Maximum order of azimuthal gabor filter, we recommend a default of 1
 
-    
+        max_radius (float or 'auto'): The maximum radius for connecting neighbors.
+        If 'auto', the radius is adaptively determined based on median neighbor distance.
+        If None, no radius pruning is applied.
+
+        radius_multiplier (float): Factor to multiply the median neighbor distance by
+        when `max_radius` is 'auto'.
+
     Optional Args:
         plt_edge (bool): Visualize the edge histogram*
 
@@ -57,14 +65,15 @@ def initialize_banksy(adata: anndata.AnnData,
 
     for m in range(max_m + 1):
 
-        weights_graph, distance_graph, theta_graph = generate_spatial_weights_fixed_nbrs(
-            adata.obsm[coord_keys[2]],
+        weights_graph, distance_graph, theta_graph = generate_spatial_weights(
+            locations=adata.obsm[coord_keys[2]],
             m=m,
             num_neighbours=num_neighbours,
             decay_type=nbr_weight_decay,
             nbr_object=nbrs,
             verbose=False,
-            max_radius=None
+            max_radius=max_radius,
+            radius_multiplier=radius_multiplier
         )
 
         weights_graphs[m] = weights_graph

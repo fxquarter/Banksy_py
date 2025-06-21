@@ -12,6 +12,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import scipy
 
 from typing import Union, Tuple, List
 
@@ -29,6 +30,8 @@ import leidenalg
 from banksy_utils.time_utils import timer
 from banksy.csr_operations import remove_greater_than, row_normalize, filter_by_rank_and_threshold
 from banksy.labels import Label
+# Import new graph construction functions
+from banksy.graph import construct_spatial_graph, theta_from_spatial_graph, generate_spatial_weights
 
 def gaussian_weight_1d(distance: float, sigma: float):
     """
@@ -64,220 +67,10 @@ def p_equiv_radius(p: float, sigma: float):
 
 
 #
-# spatial graph generation
-# ========================
+# spatial graph generation functions are now in banksy.graph
 #
 
 @timer
-def generate_spatial_distance_graph(locations: np.ndarray,
-                                    nbr_object: NearestNeighbors = None,
-                                    num_neighbours: int = None,
-                                    radius: Union[float, int] = None,
-                                    ) -> csr_matrix:
-    """
-    generate a spatial graph with neighbours within a given radius
-    """
-
-    num_locations = locations.shape[0]
-
-    if nbr_object is None:
-        # set up neighbour object
-        nbrs = NearestNeighbors(algorithm='ball_tree').fit(locations)
-    else:  # use provided sklearn NN object
-        nbrs = nbr_object
-
-    if num_neighbours is None:
-        # no limit to number of neighbours
-        return nbrs.radius_neighbors_graph(radius=radius,
-                                           mode="distance")
-
-    else:
-        assert isinstance(num_neighbours, int), (
-            f"number of neighbours {num_neighbours} is not an integer"
-        )
-
-        graph_out = nbrs.kneighbors_graph(n_neighbors=num_neighbours,
-                                          mode="distance")
-
-        if radius is not None:
-            assert isinstance(radius, (float, int)), (
-                f"Radius {radius} is not an integer or float"
-            )
-
-            graph_out = remove_greater_than(graph_out, radius,
-                                            copy=False, verbose=False)
-
-        return graph_out
-
-@timer
-def theta_from_spatial_graph(locations: np.ndarray,
-                             spatial_graph: csr_matrix,
-                             ):
-    """
-    get azimuthal angles from spatial graph and coordinates
-    (assumed dim 1: x, dim 2: y, dim 3: z...)
-
-    returns CSR matrix with theta (azimuthal angles) as .data
-    """
-
-    theta_data = np.zeros_like(spatial_graph.data, dtype=np.float32)
-
-    for n in range(spatial_graph.indptr.shape[0] - 1):
-        ptr_start, ptr_end = spatial_graph.indptr[n], spatial_graph.indptr[n + 1]
-        nbr_indices = spatial_graph.indices[ptr_start:ptr_end]
-
-        self_coord = locations[[n], :]
-        nbr_coord = locations[nbr_indices, :]
-        relative_coord = nbr_coord - self_coord
-
-        theta_data[ptr_start:ptr_end] = np.arctan2(
-            relative_coord[:, 1], relative_coord[:, 0])
-
-    theta_graph = spatial_graph.copy()
-    theta_graph.data = theta_data
-
-    return theta_graph
-
-
-@timer
-def generate_spatial_weights_fixed_nbrs(locations: np.ndarray,
-                                        m: int = 0,  # azimuthal transform order
-                                        num_neighbours: int = 10,
-                                        decay_type: str = "reciprocal",
-                                        nbr_object: NearestNeighbors = None,
-                                        verbose: bool = True,
-                                        max_radius: int = None,
-                                        ) -> Tuple[csr_matrix, csr_matrix, Union[csr_matrix, None]]:
-    """
-    generate a graph (csr format) where edge weights decay with distance
-    """
-
-    distance_graph = generate_spatial_distance_graph(
-        locations,
-        nbr_object=nbr_object,
-        num_neighbours=num_neighbours * (m + 1),
-        radius=max_radius,
-    )
-
-    if m > 0:
-        theta_graph = theta_from_spatial_graph(locations, distance_graph)
-    else:
-        theta_graph = None
-
-    graph_out = distance_graph.copy()
-
-    # compute weights from nbr distances (r)
-    # --------------------------------------
-
-    if decay_type == "uniform":
-
-        graph_out.data = np.ones_like(graph_out.data)
-
-    elif decay_type == "reciprocal":
-
-        graph_out.data = 1 / graph_out.data
-
-    elif decay_type == "reciprocal_squared":
-
-        graph_out.data = 1 / (graph_out.data ** 2)
-
-    elif decay_type == "scaled_gaussian":
-
-        indptr, data = graph_out.indptr, graph_out.data
-
-        for n in range(len(indptr) - 1):
-
-            start_ptr, end_ptr = indptr[n], indptr[n + 1]
-            if end_ptr >= start_ptr:
-                # row entries correspond to a cell's neighbours
-                nbrs = data[start_ptr:end_ptr]
-                median_r = np.median(nbrs)
-                #### Changed here
-                weights = np.exp(-(nbrs / median_r) ** 2)
-                data[start_ptr:end_ptr] = weights
-
-    elif decay_type == "ranked":
-
-        linear_weights = np.exp(
-            -1 * (np.arange(1, num_neighbours + 1) * 1.5 / num_neighbours) ** 2
-        )
-
-        indptr, data = graph_out.indptr, graph_out.data
-
-        for n in range(len(indptr) - 1):
-
-            start_ptr, end_ptr = indptr[n], indptr[n + 1]
-
-            if end_ptr >= start_ptr:
-                # row entries correspond to a cell's neighbours
-                nbrs = data[start_ptr:end_ptr]
-
-                # assign the weights in ranked order
-                weights = np.empty_like(linear_weights)
-                weights[np.argsort(nbrs)] = linear_weights
-
-                data[start_ptr:end_ptr] = weights
-
-    else:
-        raise ValueError(
-            f"Weights decay type <{decay_type}> not recognised.\n"
-            f"Should be 'uniform', 'reciprocal', 'reciprocal_squared', "
-            f"'scaled_gaussian' or 'ranked'."
-        )
-
-    # make nbr weights sum to 1
-    graph_out = row_normalize(graph_out, verbose=verbose)
-
-    # multiply by Azimuthal Fourier Transform
-    if m > 0:
-        graph_out.data = graph_out.data * np.exp(1j * m * theta_graph.data)
-
-    return graph_out, distance_graph, theta_graph
-
-
-@timer
-def generate_spatial_weights_fixed_radius(locations: np.ndarray,
-                                          p: float = 0.05,
-                                          sigma: float = 100,
-                                          decay_type: str = "gaussian",
-                                          nbr_object: NearestNeighbors = None,
-                                          max_num_neighbours: int = None,
-                                          verbose: bool = True,
-                                          ) -> Tuple[csr_matrix, csr_matrix]:
-    """
-    generate a graph (csr format) where edge weights decay with distance
-    """
-
-    if decay_type == "gaussian":
-        r = p_equiv_radius(p, sigma)
-        if verbose:
-            print(f"Equivalent radius for removing {p} of "
-                  f"gaussian distribution with sigma {sigma} is: {r}\n")
-    else:
-        raise ValueError(
-            f"decay_type {decay_type} incorrect or not implemented")
-
-    distance_graph = generate_spatial_distance_graph(locations,
-                                                     nbr_object=nbr_object,
-                                                     num_neighbours=max_num_neighbours,
-                                                     radius=r)
-
-    graph_out = distance_graph.copy()
-
-    # convert distances to weights
-    if decay_type == "gaussian":
-        graph_out.data = gaussian_weight_2d(graph_out.data, sigma)
-    else:
-        raise ValueError(
-            f"decay_type {decay_type} incorrect or not implemented")
-
-    return row_normalize(graph_out, verbose=verbose), distance_graph
-
-
-#
-# Combining self / neighbours
-# ===========================
-#
 def zscore(matrix: Union[np.ndarray, csr_matrix],
            axis: int = 0,
            ) -> np.ndarray:
@@ -649,32 +442,22 @@ class LeidenPartition(object):
                   seed: int = None,
                   ) -> Tuple[Label, float]:
         """
-        partition the graph
+        partition the graph with the Leiden algorithm
         """
+        if partition_metric == leidenalg.RBConfigurationVertexPartition:
+            partition_kwargs = {'resolution_parameter': resolution}
+        elif partition_metric == leidenalg.ModularityVertexPartition:
+            partition_kwargs = {}
+        else:
+            raise ValueError(
+                f"partition type {partition_metric} not recognised")
+
         partition = leidenalg.find_partition(
             self.G,
             partition_metric,
-            resolution_parameter=resolution,
-            weights="weight",
             n_iterations=n_iterations,
             seed=seed,
+            **partition_kwargs,
         )
 
-        label = Label(partition.membership)
-
-        print(f"---- Partitioned BANKSY graph ----\n"
-              f"modularity: {partition.modularity :0.2f}\n"
-              f"{label.num_labels} unique labels:\n{label.ids}\n")
-
-        return label, partition.modularity
-
-@timer
-def median_dist_to_nearest_neighbour(adata: anndata.AnnData,
-                                     key: str = "coord_xy"):
-    
-    '''Finds and returns median cell distance in a graph'''
-    nbrs = NearestNeighbors(algorithm='ball_tree').fit(adata.obsm[key])
-    distances, indices = nbrs.kneighbors(n_neighbors=1)
-    median_cell_distance = np.median(distances)
-    print(f"\nMedian distance to closest cell = {median_cell_distance}\n")
-    return nbrs
+        return Label(partition.membership), partition.quality()
