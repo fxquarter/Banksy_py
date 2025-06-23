@@ -3,6 +3,7 @@
 ### 实验所用数据集：Visium_HD_Mouse_Brain，Visium_HD_3prime_Human_Ovarian_Cancer
 ### 运行环境：python==3.11 anaconda
 ### 具体改进：融合K-NN建图和半径建图，实现自适应半径剪枝的k-NN空间图，在优化后的空间图基础上，只对经过剪枝的有效边进行计算，同时处于visium hd的高分辨率特性导致内存溢出，采用BPCells框架将矩阵生成占用的部分内存转移至磁盘，降低内存使用门槛。
+### 文件说明：visiumhd_analysis(1~4).py分别对应visium hd数据基于banksy框架的复现；融合自适应k值改进；优化细胞过滤流程并融入BPCells改进；最终改进（K-NN自适应半径剪枝建图及空间权重优化）,visium_hd_process.py是对数据集源文件转h5ad文件的处理流程。
 ### 实验效果：
 #### nospatial：
 ![image](https://github.com/user-attachments/assets/feae259b-ec07-4d40-b2de-953f63d537a5)
