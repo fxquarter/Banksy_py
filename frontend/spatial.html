@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banksy图构建改进</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            background-color: #f5f5f5;
+        }
+
+        /* 侧边栏样式 */
+        .sidebar {
+            width: 20%;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            padding: 20px 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            position: fixed; /* 固定侧边栏 */
+            overflow-y: auto; /* 允许侧边栏内容滚动 */
+        }
+
+        .sidebar-header {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid #34495e;
+            margin-bottom: 20px;
+        }
+
+        .sidebar-header h2 {
+            margin: 0;
+            color: #ecf0f1;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-menu li {
+            padding: 12px 20px;
+            transition: background-color 0.3s;
+        }
+
+        .sidebar-menu li:hover {
+            background-color: #34495e;
+            cursor: pointer;
+        }
+
+        .sidebar-menu li a {
+            color: #ecf0f1;
+            text-decoration: none;
+            display: block;
+        }
+
+        /* 当前活动菜单项样式 */
+        .sidebar-menu li.active {
+            background-color: #34495e;
+        }
+
+        .sidebar-menu li.active a {
+            color: #1abc9c; /* 高亮颜色 */
+            font-weight: bold;
+        }
+
+        /* 主内容区样式 */
+        .main-content {
+            width: 80%;
+            padding: 20px;
+            margin-left: 20%; /* 为固定侧边栏留出空间 */
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .gallery {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        .image-container {
+            width: 48%;
+            margin-bottom: 30px;
+            position: relative;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .image-container:hover {
+            transform: scale(1.02);
+        }
+
+        .image-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .info-box {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .image-container:hover .info-box {
+            opacity: 1;
+        }
+
+        .info-box h3 {
+            margin-top: 0;
+            color: #fff;
+        }
+
+        .info-box p {
+            margin-bottom: 0;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+<!-- 侧边栏 -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h2>Banksy图构建改进</h2>
+    </div>
+    <ul class="sidebar-menu">
+        <li><a href="cluster.html">综合聚类</a></li>
+        <li><a href="umap.html">簇单独可视化</a></li>
+        <li><a href="hot.html">矩阵热图</a></li>
+        <li class="active"><a href="spatial.html">有无空间方法对比</a></li>
+    </ul>
+</div>
+
+<!-- 主内容区 -->
+<div class="main-content">
+    <h1>Banksy图构建改进</h1>
+
+    <div class="gallery">
+        <!-- 第一行 -->
+        <div class="image-container">
+            <img src="image/复现有无空间方法.png" alt="复现有无空间方法">
+            <div class="info-box">
+                <h3>复现有无空间方法</h3>
+                <p>
+                    Spatial色彩分布更规整，不同颜色的区域边界相对清晰，空间结构特征保留较好，能体现样本在空间维度的分布规律；Nonspatial颜色分布相对零散、混杂，空间关联性被弱化，类别区分在空间布局上不如有空间方法清晰，反映出无空间约束时，样本分布的空间特征未得到有效利用，聚类或分析结果的空间结构性较差
+                </p>
+            </div>
+        </div>
+
+        <!-- 第二行 -->
+        <div class="image-container">
+            <img src="image/细胞过滤优化后有无空间方法.png" alt="细胞过滤优化后有无空间方法">
+            <div class="info-box">
+                <h3>细胞过滤优化后有无空间方法</h3>
+                <p>Spatial：颜色分布更贴合类器官空间结构，不同区域边界清晰，在空间上有序排列，保留样本实际空间关联。Nonspatial：颜色分布零散、混杂，空间结构性被破坏，丢失样本空间维度的分布规律 。
+                </p>
+            </div>
+        </div>
+
+        <!-- 第三行 -->
+        <div class="image-container">
+            <img src="image/图构建后有无空间方法.png" alt="图构建后有无空间方法">
+            <div class="info-box">
+                <h3>图构建后有无空间方法</h3>
+                <p>Spatial 结果中，颜色分布更贴合样本空间结构，类别边界与空间区域关联紧密；Nonspatial 因忽略空间位置，类别分布更零散，丢失部分空间约束下的有序性 。</p>
+            </div>
+        </div>
+
+        <!-- 第四行 -->
+<!--        <div class="image-container">-->
+<!--            <img src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Banksy_2005_London_02.jpg" alt="Banksy作品7">-->
+<!--            <div class="info-box">-->
+<!--                <h3>电话亭杀手</h3>-->
+<!--                <p>这幅作品展示了一个持刀男子攻击一个电话亭，象征着传统通讯方式的消亡。它是Banksy对技术进步的社会评论。</p>-->
+<!--            </div>-->
+<!--        </div>-->
+
+    </div>
+</div>
+</body>
+</html>
